@@ -6,6 +6,7 @@ custom:
   wsgi:
     app: app.app
     packRequirements: false
+    pythonBin: venv/bin/python
   pythonRequirements:
     dockerizePip: true
 package:
@@ -14,12 +15,13 @@ package:
     - venv/**
 provider:
   name: aws
-  runtime: python3.6
+  runtime: python3.7
+  profile: angent_richard
   stage: dev
-  region: us-east-1
+  region: eu-west-2
 functions:
   app:
-    handler: wsgi.handler
+    handler: wsgi_handler.handler
     events:
       - http: ANY /
       - http: 'ANY {proxy+}'
