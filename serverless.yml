@@ -2,13 +2,21 @@ service: serverless-tracker
 plugins:
   - serverless-python-requirements
   - serverless-wsgi
+  - serverless-dynamodb-local
 custom:
+  tableName: 'groups-table-${self:provider.stage}'
+  dynamodb:
+    stages:
+      - dev
+    start:
+      migrate: true
   wsgi:
     app: app.app
     packRequirements: false
     pythonBin: venv/bin/python
   pythonRequirements:
     dockerizePip: true
+    invalidateCaches: true
 package:
   exclude:
     - node_modules/**
@@ -19,9 +27,39 @@ provider:
   profile: angent_richard
   stage: dev
   region: eu-west-2
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:DescribeTable
+      Resource:
+        - { "Fn::GetAtt": ["UsersDynamoDBTable", "Arn" ] }
+  environment:
+    TABLE_NAME: ${self:custom.tableName}
+    REGION: ${self:provider.region}
 functions:
   app:
     handler: wsgi_handler.handler
     events:
       - http: ANY /
       - http: 'ANY {proxy+}'
+resources:
+  Resources:
+    UsersDynamoDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: code
+            AttributeType: S
+        KeySchema:
+          - AttributeName: code
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:custom.tableName}

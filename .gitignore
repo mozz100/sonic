@@ -104,3 +104,4 @@ ENV/
 .serverless/
 .requirements/
 node_modules
+.dynamodb
