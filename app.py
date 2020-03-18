@@ -1,13 +1,14 @@
-from flask import Flask, render_template, Blueprint, jsonify, redirect
+from flask import Flask, render_template, Blueprint, jsonify
 from pynamodb.models import Model
 from pynamodb.attributes import UnicodeAttribute
 import os
 import datetime
 from flask_pynamodb_resource import create_resource
+from flask_restx import Api, Resource
 
 IS_OFFLINE = bool(os.environ.get("IS_OFFLINE", False))
 
-class ShortCodeModel(Model):
+class ShortCode(Model):
     class Meta:
         table_name = os.environ["TABLE_NAME"]
         if IS_OFFLINE:
@@ -28,42 +29,39 @@ app = Flask(__name__)
 def main():
     return render_template('index.html')
 
-@app.route("/thanks")
-def thanks():
-    return render_template('thanks.html')
-
 @app.route("/<code>")
 def hit(code):
     try:
-        code = ShortCodeModel.get(code)
+        code = ShortCode.get(code)
         code.viewed = datetime.datetime.now().isoformat()
         code.save()
-        code.refresh(consistent_read=True)
-    except ShortCodeModel.DoesNotExist:
-        # do redirect anyway
+        return render_template('thanks.html')
+    except ShortCode.DoesNotExist:
         pass
-    return redirect("./thanks", code=302)
+    return render_template('miss.html'), 404
     
 
 # See https://github.com/brandond/flask-pynamodb-resource/blob/master/examples/office_model.py
 # Attach APIs to a blueprint to avoid cluttering up the root URL prefix
-api_v1 = Blueprint('api_v1', __name__)
+api_bp = Blueprint('api_v1', __name__)
+api = Api(api_bp, default='Group', default_label='Groups', doc="/doc")
 
 # Create the resources and register them with the blueprint
 # Also override the endpoint name for each resource; by default it simply uses the model's table name
-create_resource(ShortCodeModel).register(api_v1, '/codes')
+create_resource(ShortCode).register(api, '/codes')
 
-@api_v1.route('/groups/<group_id>')
-def group(group_id):
-    # all codes in the group
-    codes = [dict(s) for s in ShortCodeModel.scan(filter_condition=ShortCodeModel.group==group_id)]
-    return jsonify(codes)
+@api.route('/groups/<id>')
+@api.param('id', _in="path")
+class Group(Resource):
+    def get(self, id):
+        codes = [dict(s) for s in ShortCode.scan(filter_condition=ShortCode.group==id)]
+        return codes
 
 # Register the blueprint with the app AFTER attaching the resources
-app.register_blueprint(api_v1, url_prefix='/api/v1')
+app.register_blueprint(api_bp, url_prefix='/api/v1')
 
 if IS_OFFLINE:
-    # Print rules to stdout
+    # Print routes to stdout
     for rule in app.url_map.iter_rules():
         print('{} => {}'.format(rule.rule, rule.endpoint))
 
